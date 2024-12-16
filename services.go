@@ -40,14 +40,14 @@ func withBearerAuthentication(app *App, f func(c echo.Context, user *User, acces
         if client == nil {
             for _, fallbackAPIServer := range app.Config.FallbackAPIServers {
                 if fallbackAPIServer.FullForward {
-                    return f(c, &accessToken, true)
+                    return f(c, nil, &accessToken, true)
                 }
             }
             return c.JSON(http.StatusUnauthorized, ErrorResponse{Path: Ptr(c.Request().URL.Path)})
         }
 
         user := client.User
-        return f(c, &user, false)
+        return f(c, &user, nil, false)
     }
 }
 
