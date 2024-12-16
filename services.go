@@ -229,6 +229,7 @@ func ServicesPlayerCertificates(app *App) func(c echo.Context) error {
 
 			return c.JSON(http.StatusOK, body)
 		}
+	}
 
 		key, err := rsa.GenerateKey(rand.Reader, 2048)
 		if err != nil {
