@@ -21,6 +21,7 @@ type authlibInjectorMeta struct {
 	Links                   authlibInjectorLinks `json:"links"`
 	ServerName              string               `json:"serverName"`
 	FeatureEnableProfileKey bool                 `json:"feature.enable_profile_key"`
+	FeatureFullForward 		bool                 `json:"feature.full_forward"`
 }
 
 type authlibInjectorResponse struct {
@@ -45,6 +46,7 @@ func authlibInjectorSerializeKey(key *rsa.PublicKey) (string, error) {
 func AuthlibInjectorRoot(app *App) func(c echo.Context) error {
 	skinDomains := make([]string, 0, 1+len(app.Config.FallbackAPIServers))
 	skinDomains = append(skinDomains, app.Config.Domain)
+	HasFullForward := false
 	for _, fallbackAPIServer := range app.Config.FallbackAPIServers {
 		for _, skinDomain := range fallbackAPIServer.SkinDomains {
 			if !Contains(skinDomains, skinDomain) {
@@ -52,6 +54,13 @@ func AuthlibInjectorRoot(app *App) func(c echo.Context) error {
 			}
 		}
 	}
+
+	for _, fallbackAPIServer := range app.Config.FallbackAPIServers {
+			if fallbackAPIServer.FullForward {
+				HasFullForward = true
+				break
+			}
+		}
 
 	signaturePublicKey, err := authlibInjectorSerializeKey(&app.Key.PublicKey)
 	Check(err)
@@ -72,6 +81,7 @@ func AuthlibInjectorRoot(app *App) func(c echo.Context) error {
 				Register: Unwrap(url.JoinPath(app.FrontEndURL, "web/registration")),
 			},
 			ServerName:              app.Config.InstanceName,
+			FeatureFullForward: 	HasFullForward,
 			FeatureEnableProfileKey: true,
 		},
 		SignaturePublickey:  signaturePublicKey,

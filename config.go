@@ -34,6 +34,7 @@ type FallbackAPIServer struct {
 	SkinDomains      []string
 	CacheTTLSeconds  int
 	DenyUnknownUsers bool
+	FullForward bool
 }
 
 type transientUsersConfig struct {
