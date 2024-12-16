@@ -14,6 +14,7 @@ import (
 	"gorm.io/gorm"
 	"math/big"
 	"log"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -231,7 +232,7 @@ func ServicesPlayerCertificates(app *App) func(c echo.Context) error {
 				return c.NoContent(http.StatusUnauthorized) 
 			}
 			
-			body, err := ioutil.ReadAll(res.Body)
+			body, err := io.ReadAll(res.Body)
 			if err != nil {
 				return c.NoContent(http.StatusUnauthorized)
 			}
