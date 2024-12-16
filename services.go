@@ -21,29 +21,34 @@ import (
 
 // Authenticate a user using a bearer token, and call `f` with a reference to
 // the user
-func withBearerAuthentication(app *App, f func(c echo.Context, user *User) error) func(c echo.Context) error {
-	bearerExp := regexp.MustCompile("^Bearer (.*)$")
+func withBearerAuthentication(app *App, f func(c echo.Context, user *User, accessToken *string, forward bool) error) func(c echo.Context) error {
+    bearerExp := regexp.MustCompile("^Bearer (.*)$")
 
-	return func(c echo.Context) error {
-		authorizationHeader := c.Request().Header.Get("Authorization")
-		if authorizationHeader == "" {
-			return c.JSON(http.StatusUnauthorized, ErrorResponse{Path: Ptr(c.Request().URL.Path)})
-		}
+    return func(c echo.Context) error {
+        authorizationHeader := c.Request().Header.Get("Authorization")
+        if authorizationHeader == "" {
+            return c.JSON(http.StatusUnauthorized, ErrorResponse{Path: Ptr(c.Request().URL.Path)})
+        }
 
-		accessTokenMatch := bearerExp.FindStringSubmatch(authorizationHeader)
-		if accessTokenMatch == nil || len(accessTokenMatch) < 2 {
-			return c.JSON(http.StatusUnauthorized, ErrorResponse{Path: Ptr(c.Request().URL.Path)})
-		}
-		accessToken := accessTokenMatch[1]
+        accessTokenMatch := bearerExp.FindStringSubmatch(authorizationHeader)
+        if accessTokenMatch == nil || len(accessTokenMatch) < 2 {
+            return c.JSON(http.StatusUnauthorized, ErrorResponse{Path: Ptr(c.Request().URL.Path)})
+        }
+        accessToken := accessTokenMatch[1]
 
-		client := app.GetClient(accessToken, StalePolicyAllow)
-		if client == nil {
-			return c.JSON(http.StatusUnauthorized, ErrorResponse{Path: Ptr(c.Request().URL.Path)})
-		}
-		user := client.User
+        client := app.GetClient(accessToken, StalePolicyAllow)
+        if client == nil {
+            for _, fallbackAPIServer := range app.Config.FallbackAPIServers {
+                if fallbackAPIServer.FullForward {
+                    return f(c, &accessToken, true)
+                }
+            }
+            return c.JSON(http.StatusUnauthorized, ErrorResponse{Path: Ptr(c.Request().URL.Path)})
+        }
 
-		return f(c, &user)
-	}
+        user := client.User
+        return f(c, &user, false)
+    }
 }
 
 type ServicesProfileSkin struct {
@@ -193,7 +198,38 @@ type playerCertificatesResponse struct {
 // POST /player/certificates
 // https://wiki.vg/Mojang_API#Player_Certificates
 func ServicesPlayerCertificates(app *App) func(c echo.Context) error {
-	return withBearerAuthentication(app, func(c echo.Context, user *User) error {
+	return withBearerAuthentication(app, func(c echo.Context, user *User, accessToken *string, forward bool) error {
+
+		if forward {
+			for _, fallbackAPIServer := range app.Config.FallbackAPIServers {
+			base, err := url.Parse(fallbackAPIServer.ServicesURL)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+
+			base.Path += "/player/certificates"
+
+			res, err := MakeHTTPClient().Post(base.String(), "Authorization", "Bearer "+*accessToken)
+			if err != nil {
+				log.Printf("Received invalid response from fallback API server at %s\n", base.String())
+				continue
+			}
+
+			if res.StatusCode != http.StatusOK {
+				return c.NoContent(http.StatusUnauthorized) 
+			}
+			
+			body, err := ioutil.ReadAll(res.Body)
+			if err != nil {
+				return c.NoContent(http.StatusUnauthorized)
+			}
+
+			defer res.Body.Close()
+
+			return c.JSON(http.StatusOK, body)
+		}
+
 		key, err := rsa.GenerateKey(rand.Reader, 2048)
 		if err != nil {
 			return err
