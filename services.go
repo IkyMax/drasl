@@ -13,7 +13,9 @@ import (
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
 	"math/big"
+	"log"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -210,11 +212,20 @@ func ServicesPlayerCertificates(app *App) func(c echo.Context) error {
 
 			base.Path += "/player/certificates"
 
-			res, err := MakeHTTPClient().Post(base.String(), "Authorization", "Bearer "+*accessToken)
+			req, err := http.NewRequest("POST", base.String(), nil)
 			if err != nil {
-				log.Printf("Received invalid response from fallback API server at %s\n", base.String())
+				log.Println("Error creating request:", err)
 				continue
 			}
+
+			req.Header.Set("Authorization", "Bearer "+*accessToken)
+
+			client := MakeHTTPClient()
+				res, err := client.Do(req)
+				if err != nil {
+					log.Printf("Received invalid response from fallback API server at %s\n", base.String())
+					continue
+				}
 
 			if res.StatusCode != http.StatusOK {
 				return c.NoContent(http.StatusUnauthorized) 
